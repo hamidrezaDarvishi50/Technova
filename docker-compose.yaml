@@ -1,0 +1,89 @@
+services:
+  product_app:
+    image: technova_app
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        DOCKER_REG: ${DOCKER_REG}
+    container_name: "technova_app"
+    command: web
+    volumes:
+      - ./app:/home/app
+    ports:
+      - "${APP_PORT}:${APP_PORT}"
+    env_file:
+      - .env
+
+    environment:
+      DEBUG: "False"
+      APP_MODE: "Production"
+      DJANGO_SECRET_KEY: $DJANGO_SECRET_KEY
+      DJANGO_SUPERUSER_USERNAME: $DJANGO_SUPERUSER_USERNAME
+      DJANGO_SUPERUSER_PASSWORD: $DJANGO_SUPERUSER_PASSWORD
+      # LICENSE_KEY: $LICENSE_K
+      POSTGRES_DB: $POSTGRES_DB
+      POSTGRES_USER: $POSTGRES_USER
+      POSTGRES_PASSWORD: $POSTGRES_PASSWORD
+      POSTGRES_HOST: db
+      POSTGRES_PORT: $POSTGRES_PORT
+      GUNICORN_WORKER_NUMBER: $GUNICORN_WORKER_NUMBER
+      GUNICORN_TIMEOUT: $GUNICORN_TIMEOUT
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  celery:
+    image: technova_celery
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        DOCKER_REG: ${DOCKER_REG:-}
+    container_name: technova_celery
+    command: celery -A config worker --loglevel=info
+    volumes:
+      - ./app:/home/app
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: db
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  db:
+    image: postgres:17
+    container_name: technova_db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: $POSTGRES_DB
+      POSTGRES_USER: $POSTGRES_USER
+      POSTGRES_PASSWORD: $POSTGRES_PASSWORD
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: "technova_redis"
+    ports:
+      - "6379:6379"
+
+volumes:
+  db_data: {}
