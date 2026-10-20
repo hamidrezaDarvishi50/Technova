@@ -5,7 +5,7 @@ from django.db import transaction
 from rest_framework import serializers
 
 from .models import Customer, User, UserAccess
-from .Otp import to_ascii_digits
+from .otp import to_ascii_digits
 from .utils import normalize_phone
 
 

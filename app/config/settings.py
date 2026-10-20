@@ -45,8 +45,7 @@ INSTALLED_APPS = [
     'drf_spectacular',
     'rest_framework_simplejwt',
     "rest_framework_simplejwt.token_blacklist",
-    
-    'accounts',
+    "accounts",
 ]
 
 MIDDLEWARE = [
@@ -177,9 +176,11 @@ REST_FRAMEWORK = {
         'rest_framework.throttling.UserRateThrottle',
     ],
 
-    'DEFAULT_THROTTLE_RATES': {
-        'anon': '10/minute',
-        'user': '100/minute',
+    "DEFAULT_THROTTLE_RATES": {
+        "otp": "10/hour",
+        "login": "1000/min",
+        "anon": "100/hour",
+        "user": "1000/hour",
     },
 }
 

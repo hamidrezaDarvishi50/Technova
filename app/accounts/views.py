@@ -14,13 +14,13 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from . import Otp
+from . import otp
 from .authentication import ACTOR_CUSTOMER, ACTOR_USER, CustomerJWTAuthentication, tokens_for_customer, tokens_for_user
 from .models import Customer, User
-from .Permission import IsAdminRole, IsCustomer, IsStaffUser
+from .permission import IsAdminRole, IsCustomer, IsStaffUser
 from .serializers import *
-from .Tasks import send_otp_sms
-
+from .tasks import send_otp_sms
+from django.conf import settings
 
 class CustomerOTPRequestView(APIView):
     authentication_classes = []
@@ -33,11 +33,14 @@ class CustomerOTPRequestView(APIView):
         serializer.is_valid(raise_exception=True)
         phone = serializer.validated_data["phone"]
 
-        code = Otp.issue_otp(phone)
+        code = otp.issue_otp(phone)
         send_otp_sms.delay(phone, code)
 
-        return Response({"detail": "کد تایید ارسال شد.", "expires_in": otp.OTP_TTL})
+        data = {"detail": "کد تایید ارسال شد.", "expires_in": otp.OTP_TTL}
+        if settings.DEBUG:
+            data["debug_code"] = code
 
+        return Response(data)
 
 class CustomerOTPVerifyView(APIView):
     authentication_classes = []
@@ -50,17 +53,13 @@ class CustomerOTPVerifyView(APIView):
         serializer.is_valid(raise_exception=True)
         phone = serializer.validated_data["phone"]
 
-        Otp.verify_otp(phone, serializer.validated_data["code"])
+        otp.verify_otp(phone, serializer.validated_data["code"])
 
         customer, created = Customer.objects.get_or_create(phone=phone)
         if not customer.is_active:
             return Response(
                 {"detail": "حساب کاربری شما غیرفعال است."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        customer.last_login = timezone.now()
-        customer.save(update_fields=["last_login"])
+                status=status.HTTP_403_FORBIDDEN,)
 
         return Response(
             {
