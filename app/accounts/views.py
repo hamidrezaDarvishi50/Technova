@@ -14,13 +14,22 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiResponse
+
 from . import otp
-from .authentication import ACTOR_CUSTOMER, ACTOR_USER, CustomerJWTAuthentication, tokens_for_customer, tokens_for_user
+from .authentication import (
+    ACTOR_CUSTOMER,
+    ACTOR_USER,
+    CustomerJWTAuthentication,
+    tokens_for_customer,
+    tokens_for_user,
+)
 from .models import Customer, User
 from .permission import IsAdminRole, IsCustomer, IsStaffUser
 from .serializers import *
 from .tasks import send_otp_sms
 from django.conf import settings
+
 
 class CustomerOTPRequestView(APIView):
     authentication_classes = []
@@ -28,6 +37,13 @@ class CustomerOTPRequestView(APIView):
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "otp"
 
+    @extend_schema(
+        request=PhoneSerializer,
+        responses={
+            200: OpenApiResponse(description="کد تایید ارسال شد.")
+        },
+        summary="درخواست کد تایید مشتری",
+    )
     def post(self, request: Request):
         serializer = PhoneSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -42,12 +58,22 @@ class CustomerOTPRequestView(APIView):
 
         return Response(data)
 
+
 class CustomerOTPVerifyView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "otp"
 
+    @extend_schema(
+        request=OTPVerifySerializer,
+        responses={
+            200: OpenApiResponse(description="ورود موفق مشتری"),
+            201: OpenApiResponse(description="ثبت‌نام و ورود موفق مشتری"),
+            403: OpenApiResponse(description="حساب کاربری غیرفعال است."),
+        },
+        summary="تایید کد و ورود مشتری",
+    )
     def post(self, request: Request):
         serializer = OTPVerifySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -59,16 +85,23 @@ class CustomerOTPVerifyView(APIView):
         if not customer.is_active:
             return Response(
                 {"detail": "حساب کاربری شما غیرفعال است."},
-                status=status.HTTP_403_FORBIDDEN,)
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         return Response(
             {
                 "tokens": tokens_for_customer(customer),
                 "is_new": created,
-                "profile_completed": bool(customer.first_name and customer.last_name),
+                "profile_completed": bool(
+                    customer.first_name and customer.last_name
+                ),
                 "customer": CustomerSerializer(customer).data,
             },
-            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+            status=(
+                status.HTTP_201_CREATED
+                if created
+                else status.HTTP_200_OK
+            ),
         )
 
 
@@ -77,6 +110,21 @@ class CustomerMeView(RetrieveUpdateAPIView):
     permission_classes = [IsCustomer]
     serializer_class = CustomerSerializer
     http_method_names = ["get", "patch", "head", "options"]
+
+    @extend_schema(
+        responses=CustomerSerializer,
+        summary="دریافت پروفایل مشتری",
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+    @extend_schema(
+        request=CustomerSerializer,
+        responses=CustomerSerializer,
+        summary="ویرایش پروفایل مشتری",
+    )
+    def patch(self, request, *args, **kwargs):
+        return super().patch(request, *args, **kwargs)
 
     def get_object(self):
         return self.request.user
@@ -90,6 +138,13 @@ class _BaseRefreshView(APIView):
     def is_active(self, token) -> bool:
         raise NotImplementedError
 
+    @extend_schema(
+        request=RefreshSerializer,
+        responses={
+            200: OpenApiResponse(description="توکن دسترسی جدید"),
+        },
+        summary="دریافت توکن دسترسی جدید",
+    )
     def post(self, request):
         serializer = RefreshSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -116,7 +171,9 @@ class UserRefreshView(_BaseRefreshView):
     actor = ACTOR_USER
 
     def is_active(self, token):
-        return User.objects.filter(pk=token.get("user_id"), is_active=True).exists()
+        return User.objects.filter(
+            pk=token.get("user_id"), is_active=True
+        ).exists()
 
 
 class UserLoginView(APIView):
@@ -125,6 +182,13 @@ class UserLoginView(APIView):
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "login"
 
+    @extend_schema(
+        request=UserLoginSerializer,
+        responses={
+            200: OpenApiResponse(description="ورود موفق کاربر سازمانی"),
+        },
+        summary="ورود کاربر سازمانی",
+    )
     def post(self, request):
         serializer = UserLoginSerializer(
             data=request.data, context={"request": request}
@@ -144,10 +208,47 @@ class UserLoginView(APIView):
 class UserMeView(APIView):
     permission_classes = [IsStaffUser]
 
+    @extend_schema(
+        responses=UserSerializer,
+        summary="دریافت اطلاعات کاربر سازمانی",
+    )
     def get(self, request):
         return Response(UserSerializer(request.user).data)
 
 
+@extend_schema_view(
+    list=extend_schema(
+        responses=UserSerializer(many=True),
+        summary="دریافت فهرست کاربران",
+    ),
+    retrieve=extend_schema(
+        responses=UserSerializer,
+        summary="دریافت اطلاعات یک کاربر",
+    ),
+    create=extend_schema(
+        request=UserWriteSerializer,
+        responses=UserSerializer,
+        summary="ایجاد کاربر",
+    ),
+    update=extend_schema(
+        request=UserWriteSerializer,
+        responses=UserSerializer,
+        summary="ویرایش کامل کاربر",
+    ),
+    partial_update=extend_schema(
+        request=UserWriteSerializer,
+        responses=UserSerializer,
+        summary="ویرایش بخشی از اطلاعات کاربر",
+    ),
+    destroy=extend_schema(
+        responses={
+            204: OpenApiResponse(
+                description="حساب کاربر غیرفعال شد."
+            )
+        },
+        summary="غیرفعال کردن کاربر",
+    ),
+)
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.select_related("access").order_by("-id")
     permission_classes = [IsAdminRole]
