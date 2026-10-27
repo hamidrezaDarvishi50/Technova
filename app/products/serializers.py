@@ -116,11 +116,9 @@ class ProductFilterSerializer(serializers.Serializer):
 
 
 class FavoriteAddSerializer(serializers.Serializer):
-    product_id = serializers.PrimaryKeyRelatedField(
-        queryset=Product.objects.all(), source="product")
-    
+
     product = serializers.SlugRelatedField(
         slug_field="slug",
         queryset=Product.objects.all(),
-        error_messages={"does_not_exist": "محصولی با این slug وجود ندارد."},
+        error_messages={"does_not_exist": "محصولی با این name وجود ندارد."},
     )
