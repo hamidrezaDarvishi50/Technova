@@ -11,7 +11,7 @@ OTP_TTL = 120
 RESEND_COOLDOWN = 60 
 MAX_VERIFY_ATTEMPTS = 5
 MAX_SENDS_PER_HOUR = 5
-
+OTP_LENGTH = 4
 _DIGITS = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
 
 
@@ -53,7 +53,7 @@ def issue_otp(phone: str) -> str:
     if _incr(_key("hour", phone), 3600) > MAX_SENDS_PER_HOUR:
         raise Throttled(wait=3600, detail="تعداد درخواست کد بیش از حد مجاز است.")
 
-    code = f"{secrets.randbelow(10**6):06d}"
+    code = f"{secrets.randbelow(10**OTP_LENGTH):0{OTP_LENGTH}d}"
     cache.set(_key("code", phone), _hash(phone, code), OTP_TTL)
     cache.set(_key("attempts", phone), 0, OTP_TTL)
     return code

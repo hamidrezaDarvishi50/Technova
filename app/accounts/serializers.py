@@ -5,8 +5,8 @@ from django.db import transaction
 from rest_framework import serializers
 
 from .models import Customer, User, UserAccess
-from .otp import to_ascii_digits
 from .utils import normalize_phone
+from .otp import OTP_LENGTH, to_ascii_digits
 
 
 # --------------------------------------------------------------------------
@@ -19,13 +19,14 @@ class PhoneSerializer(serializers.Serializer):
         return normalize_phone(value)  # -> 9123456789
 
 
+
 class OTPVerifySerializer(PhoneSerializer):
     code = serializers.CharField(max_length=10)
 
     def validate_code(self, value):
         value = to_ascii_digits(value)
-        if not re.fullmatch(r"\d{6}", value):
-            raise serializers.ValidationError("کد باید ۶ رقم باشد.")
+        if not re.fullmatch(rf"\d{{{OTP_LENGTH}}}", value):
+            raise serializers.ValidationError(f"کد باید {OTP_LENGTH} رقم باشد.")
         return value
 
 
@@ -43,9 +44,9 @@ class CustomerSerializer(serializers.ModelSerializer):
             "last_name",
             "email",
             "created_at",
+            "favorite_products",
         ]
         read_only_fields = ["id", "phone", "created_at"]
-
 
 # --------------------------------------------------------------------------
 # User (پنل)
@@ -97,14 +98,13 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class UserWriteSerializer(serializers.ModelSerializer):
+    
     """ساخت/ویرایش کاربر توسط ادمین."""
 
     phone = serializers.CharField(
-        required=False, allow_null=True, allow_blank=True, max_length=20
-    )
+        required=False, allow_null=True, allow_blank=True, max_length=20)
     password = serializers.CharField(
-        write_only=True, required=False, trim_whitespace=False
-    )
+        write_only=True, required=False, trim_whitespace=False)
     access = UserAccessSerializer(required=False)
 
     class Meta:
@@ -178,3 +178,4 @@ class UserWriteSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         fresh = User.objects.select_related("access").get(pk=instance.pk)
         return UserSerializer(fresh, context=self.context).data
+

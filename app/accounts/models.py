@@ -90,6 +90,7 @@ class Customer(models.Model):
     first_name = models.CharField(max_length=50, blank=True)
     last_name = models.CharField(max_length=50, blank=True)
     email = models.EmailField(max_length=100, blank=True)
+    favorite_products = models.ManyToManyField("products.Product", related_name="favorited_by", blank=True, db_table="favorite_item",)
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
